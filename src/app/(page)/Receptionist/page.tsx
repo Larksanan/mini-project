@@ -2,7 +2,7 @@
 'use client';
 import React, { useState, useEffect, useCallback } from 'react';
 import { IReceptionist } from '@/models/Receptionist';
-import ReceptionistTable from '@/components/Receptionist/ReceptionistTable';
+import ReceptionistTable from '@/components/receptionist/ReceptionistTable';
 
 interface SortDescriptor {
   column: string;

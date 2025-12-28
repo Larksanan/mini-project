@@ -4,7 +4,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
-import ReceptionistForm from '@/components/Receptionist/Form/Receptionist';
+import ReceptionistForm from '@/components/receptionist/Form/Receptionist';
 import { IReceptionistFormData } from '@/types/Receptionist';
 import Spinner from '@/components/ui/Spinner';
 

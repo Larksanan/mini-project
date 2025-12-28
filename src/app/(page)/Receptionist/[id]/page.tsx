@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation';
 import { IReceptionist } from '@/types/Receptionist';
-import ReceptionistDetailCard from '@/components/Receptionist/ReceptionistDetailCard';
+import ReceptionistDetailCard from '@/components/receptionist/ReceptionistDetailCard';
 import { useToast } from '@/components/ui/Toast';
 
 const ViewReceptionistPage = () => {

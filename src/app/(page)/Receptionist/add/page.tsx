@@ -3,7 +3,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
-import ReceptionistForm from '@/components/Receptionist/Form/Receptionist';
+import ReceptionistForm from '@/components/receptionist/Form/Receptionist';
 import { IReceptionistFormData, EmploymentStatus } from '@/types/Receptionist';
 
 export default function NewReceptionistPage() {
