@@ -153,6 +153,11 @@ export default function UserMenuItems({
         href: '/doctors',
         icon: FaUserMd,
       },
+      {
+        name: ' New Doctor',
+        href: '/doctors/new',
+        icon: FaUserMd,
+      },
     ],
     STAFF: [
       { name: 'Dashboard', href: '/dashboard/staff', icon: FiHome },

@@ -109,11 +109,14 @@ export default function SignUpForm({
       let result;
       try {
         result = await response.json();
+        // eslint-disable-next-line @typescript-eslint/no-unused-vars
       } catch (jsonError) {
         // If parsing JSON fails, it means the server didn't send a JSON response
         // This could be an HTML error page, an empty response, etc.
         // We'll treat this as a generic server error.
-        onError(`Server responded with non-JSON error: ${response.status} ${response.statusText}`);
+        onError(
+          `Server responded with non-JSON error: ${response.status} ${response.statusText}`
+        );
         onLoadingChange(false);
         return;
       }
