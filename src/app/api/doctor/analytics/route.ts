@@ -1,11 +1,27 @@
+/* eslint-disable @typescript-eslint/no-require-imports */
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// app/api/doctor/analytics/route.ts
 import { NextRequest, NextResponse } from 'next/server';
 import { getServerSession } from 'next-auth';
 import { connectDB } from '@/lib/mongodb';
-import MedicalRecord from '@/models/MedicalRecord';
-import Appointment from '@/models/Appointment';
-import { authOptions } from '@/app/api/auth/[...nextauth]/option';
+import mongoose from 'mongoose';
+import { authOptions } from '@/app/api/auth/[...nextauth]/route';
+
+// Import models
+let MedicalRecord: any;
+let Appointment: any;
+let Patient: any;
+let Doctor: any;
+
+try {
+  MedicalRecord =
+    mongoose.models.MedicalRecord || require('@/models/MedicalRecord').default;
+  Appointment =
+    mongoose.models.Appointment || require('@/models/Appointment').default;
+  Patient = mongoose.models.Patient || require('@/models/Patient').default;
+  Doctor = mongoose.models.Doctor || require('@/models/Doctor').default;
+} catch (error) {
+  console.error('Error loading models:', error);
+}
 
 interface AnalyticsData {
   overview: {
@@ -18,7 +34,6 @@ interface AnalyticsData {
     newPatients: number;
     returningPatients: number;
   };
-
   monthlyStats: any[];
   patientDemographics: any;
   appointmentTrends: any[];
@@ -28,7 +43,7 @@ interface AnalyticsData {
 
 // Helper functions for analytics data
 async function getMonthlyStats(
-  doctorId: string,
+  doctorId: mongoose.Types.ObjectId,
   startDate: Date
 ): Promise<any[]> {
   try {
@@ -89,204 +104,67 @@ async function getMonthlyStats(
   }
 }
 
-/**
- * Retrieves patient demographic statistics for a specific doctor.
- *
- * Aggregates patient data from medical records to calculate age group distribution
- * and gender distribution for all patients associated with a doctor.
- *
- * @param {string} doctorId - The unique identifier of the doctor
- * @returns {Promise<PatientDemographics>} A promise that resolves to an object containing:
- *   - ageGroups: Object with counts for age ranges (under18, age18to35, age36to60, over60)
- *   - genderDistribution: Object with counts for genders (male, female, other)
- * @returns {Promise<{
- *   ageGroups: {
- *     under18: number;
- *     age18to35: number;
- *     age36to60: number;
- *     over60: number;
- *   },
- *   genderDistribution: {
- *     male: number;
- *     female: number;
- *     other: number;
- *   }
- * }>} Demographics object with default zero values if no data is found
- *
- * @throws Does not throw; returns default zero values on error
- *
- * @example
- * const demographics = await getPatientDemographics('doctor123');
- * console.log(demographics.ageGroups.under18); // 5
- * console.log(demographics.genderDistribution.male); // 8
- *
- * @note Age calculation is based on milliseconds per year (365 * 24 * 60 * 60 * 1000)
- *       which may not account for leap years. Consider using a date library for precision.
- *
- * @todo Refactor age calculation logic to use a dedicated utility function
- * @todo Add pagination support for large datasets
- * @todo Add caching to improve performance for frequently accessed data
- */
-async function getPatientDemographics(doctorId: string): Promise<any> {
+async function getPatientDemographics(
+  doctorId: mongoose.Types.ObjectId
+): Promise<any> {
   try {
-    const ageGroups = await MedicalRecord.aggregate([
-      { $match: { doctor: doctorId } },
-      {
-        $lookup: {
-          from: 'patients',
-          localField: 'patient',
-          foreignField: '_id',
-          as: 'patientData',
-        },
-      },
-      {
-        $unwind: '$patientData',
-      },
-      {
-        $group: {
-          _id: null,
-          totalPatients: { $addToSet: '$patient' },
-          ageGroups: {
-            $push: {
-              $cond: [
-                {
-                  $lt: [
-                    {
-                      $divide: [
-                        { $subtract: [new Date(), '$patientData.dateOfBirth'] },
-                        365 * 24 * 60 * 60 * 1000,
-                      ],
-                    },
-                    18,
-                  ],
-                },
-                'under18',
-                {
-                  $cond: [
-                    {
-                      $lt: [
-                        {
-                          $divide: [
-                            {
-                              $subtract: [
-                                new Date(),
-                                '$patientData.dateOfBirth',
-                              ],
-                            },
-                            365 * 24 * 60 * 60 * 1000,
-                          ],
-                        },
-                        36,
-                      ],
-                    },
-                    'age18to35',
-                    {
-                      $cond: [
-                        {
-                          $lt: [
-                            {
-                              $divide: [
-                                {
-                                  $subtract: [
-                                    new Date(),
-                                    '$patientData.dateOfBirth',
-                                  ],
-                                },
-                                365 * 24 * 60 * 60 * 1000,
-                              ],
-                            },
-                            61,
-                          ],
-                        },
-                        'age36to60',
-                        'over60',
-                      ],
-                    },
-                  ],
-                },
-              ],
-            },
-          },
-        },
-      },
-      {
-        $project: {
-          totalPatients: { $size: '$totalPatients' },
-          ageGroups: {
-            under18: {
-              $size: {
-                $filter: {
-                  input: '$ageGroups',
-                  as: 'age',
-                  cond: { $eq: ['$$age', 'under18'] },
-                },
-              },
-            },
-            age18to35: {
-              $size: {
-                $filter: {
-                  input: '$ageGroups',
-                  as: 'age',
-                  cond: { $eq: ['$$age', 'age18to35'] },
-                },
-              },
-            },
-            age36to60: {
-              $size: {
-                $filter: {
-                  input: '$ageGroups',
-                  as: 'age',
-                  cond: { $eq: ['$$age', 'age36to60'] },
-                },
-              },
-            },
-            over60: {
-              $size: {
-                $filter: {
-                  input: '$ageGroups',
-                  as: 'age',
-                  cond: { $eq: ['$$age', 'over60'] },
-                },
-              },
-            },
-          },
-        },
-      },
-    ]);
+    // Get unique patients for this doctor from appointments
+    const uniquePatients = await Appointment.distinct('patient', {
+      doctor: doctorId,
+    });
 
-    const genderDistribution = await MedicalRecord.aggregate([
-      { $match: { doctor: doctorId } },
-      {
-        $lookup: {
-          from: 'patients',
-          localField: 'patient',
-          foreignField: '_id',
-          as: 'patientData',
-        },
-      },
-      {
-        $unwind: '$patientData',
-      },
-      {
-        $group: {
-          _id: '$patientData.gender',
-          count: { $sum: 1 },
-        },
-      },
-    ]);
+    if (uniquePatients.length === 0) {
+      return {
+        ageGroups: { under18: 0, age18to35: 0, age36to60: 0, over60: 0 },
+        genderDistribution: { male: 0, female: 0, other: 0 },
+      };
+    }
+
+    // Get patient details
+    const patients = await Patient.find({
+      _id: { $in: uniquePatients },
+      isActive: true,
+    }).lean();
+
+    // Calculate age groups
+    const now = new Date();
+    const ageGroups = {
+      under18: 0,
+      age18to35: 0,
+      age36to60: 0,
+      over60: 0,
+    };
+
+    const genderDistribution = {
+      male: 0,
+      female: 0,
+      other: 0,
+    };
+
+    patients.forEach((patient: any) => {
+      // Calculate age
+      if (patient.dateOfBirth) {
+        const age = Math.floor(
+          (now.getTime() - new Date(patient.dateOfBirth).getTime()) /
+            (365.25 * 24 * 60 * 60 * 1000)
+        );
+
+        if (age < 18) ageGroups.under18++;
+        else if (age < 36) ageGroups.age18to35++;
+        else if (age < 61) ageGroups.age36to60++;
+        else ageGroups.over60++;
+      }
+
+      // Count gender
+      const gender = patient.gender?.toLowerCase();
+      if (gender === 'male') genderDistribution.male++;
+      else if (gender === 'female') genderDistribution.female++;
+      else genderDistribution.other++;
+    });
 
     return {
-      ageGroups: ageGroups[0]?.ageGroups || {
-        under18: 0,
-        age18to35: 0,
-        age36to60: 0,
-        over60: 0,
-      },
-      genderDistribution: {
-        male: genderDistribution.find(g => g._id === 'male')?.count || 0,
-        female: genderDistribution.find(g => g._id === 'female')?.count || 0,
-        other: genderDistribution.find(g => g._id === 'other')?.count || 0,
-      },
+      ageGroups,
+      genderDistribution,
     };
   } catch (error) {
     console.error('Error in getPatientDemographics:', error);
@@ -298,7 +176,7 @@ async function getPatientDemographics(doctorId: string): Promise<any> {
 }
 
 async function getAppointmentTrends(
-  doctorId: string,
+  doctorId: mongoose.Types.ObjectId,
   startDate: Date
 ): Promise<any[]> {
   try {
@@ -372,11 +250,11 @@ async function getAppointmentTrends(
 }
 
 async function getCommonDiagnoses(
-  doctorId: string,
+  doctorId: mongoose.Types.ObjectId,
   startDate: Date
 ): Promise<any[]> {
   try {
-    const diagnoses = await MedicalRecord.aggregate([
+    const diagnoses = await Appointment.aggregate([
       {
         $match: {
           doctor: doctorId,
@@ -401,9 +279,12 @@ async function getCommonDiagnoses(
       },
     ]);
 
-    const totalDiagnoses = diagnoses.reduce((sum, item) => sum + item.count, 0);
+    const totalDiagnoses = diagnoses.reduce(
+      (sum: any, item: { count: any }) => sum + item.count,
+      0
+    );
 
-    return diagnoses.map(item => ({
+    return diagnoses.map((item: { count: number }) => ({
       ...item,
       percentage: totalDiagnoses > 0 ? item.count / totalDiagnoses : 0,
     }));
@@ -414,7 +295,7 @@ async function getCommonDiagnoses(
 }
 
 async function getRevenueAnalysis(
-  doctorId: string,
+  doctorId: mongoose.Types.ObjectId,
   startDate: Date
 ): Promise<any> {
   try {
@@ -423,7 +304,7 @@ async function getRevenueAnalysis(
         $match: {
           doctor: doctorId,
           createdAt: { $gte: startDate },
-          status: 'completed',
+          status: { $in: ['COMPLETED', 'completed'] },
         },
       },
       {
@@ -432,7 +313,8 @@ async function getRevenueAnalysis(
             year: { $year: '$createdAt' },
             month: { $month: '$createdAt' },
           },
-          revenue: { $sum: '$consultationFee' },
+          revenue: { $sum: { $ifNull: ['$consultationFee', 0] } },
+          count: { $sum: 1 },
         },
       },
       {
@@ -463,6 +345,7 @@ async function getRevenueAnalysis(
           },
           year: '$_id.year',
           revenue: 1,
+          count: 1,
         },
       },
       { $sort: { '_id.year': 1, '_id.month': 1 } },
@@ -470,7 +353,7 @@ async function getRevenueAnalysis(
 
     // Calculate growth percentages
     const monthlyRevenueWithGrowth = monthlyRevenue.map(
-      (month, index, array) => {
+      (month: { revenue: number }, index: number, array: any[]) => {
         const previousMonth = array[index - 1];
         const growth = previousMonth
           ? ((month.revenue - previousMonth.revenue) / previousMonth.revenue) *
@@ -478,41 +361,47 @@ async function getRevenueAnalysis(
           : 0;
         return {
           ...month,
-          growth: Math.round(growth * 10) / 10, // Round to 1 decimal place
+          growth: Math.round(growth * 10) / 10,
         };
       }
     );
 
-    const byService = await MedicalRecord.aggregate([
+    const byService = await Appointment.aggregate([
       {
         $match: {
           doctor: doctorId,
           createdAt: { $gte: startDate },
+          status: { $in: ['COMPLETED', 'completed'] },
+          type: { $exists: true, $ne: '' },
         },
       },
       {
         $group: {
-          _id: '$visitType',
-          revenue: { $sum: '$consultationFee' },
+          _id: '$type',
+          revenue: { $sum: { $ifNull: ['$consultationFee', 0] } },
+          count: { $sum: 1 },
         },
       },
       {
         $project: {
           service: '$_id',
           revenue: 1,
+          count: 1,
           _id: 0,
         },
       },
     ]);
 
     const totalRevenue = byService.reduce(
-      (sum, service) => sum + service.revenue,
+      (sum: number, service: { revenue: any }) => sum + (service.revenue || 0),
       0
     );
-    const byServiceWithPercentage = byService.map(service => ({
-      ...service,
-      percentage: totalRevenue > 0 ? service.revenue / totalRevenue : 0,
-    }));
+    const byServiceWithPercentage = byService.map(
+      (service: { revenue: number }) => ({
+        ...service,
+        percentage: totalRevenue > 0 ? service.revenue / totalRevenue : 0,
+      })
+    );
 
     return {
       monthlyRevenue: monthlyRevenueWithGrowth,
@@ -529,13 +418,31 @@ async function getRevenueAnalysis(
 
 export async function GET(request: NextRequest) {
   try {
+    console.log('=== Analytics API: Starting ===');
+
+    // Ensure models are loaded
+    if (!Appointment) {
+      Appointment = require('@/models/Appointment').default;
+    }
+    if (!Patient) {
+      Patient = require('@/models/Patient').default;
+    }
+    if (!Doctor) {
+      Doctor = require('@/models/Doctor').default;
+    }
+    if (!MedicalRecord) {
+      MedicalRecord = require('@/models/MedicalRecord').default;
+    }
+
     const session = await getServerSession(authOptions);
 
-    if (!session?.user) {
+    if (!session?.user?.id) {
+      console.log('No session found');
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     if (session.user.role !== 'DOCTOR') {
+      console.log('User is not a doctor:', session.user.role);
       return NextResponse.json(
         { error: 'Forbidden - Doctor access required' },
         { status: 403 }
@@ -546,7 +453,30 @@ export async function GET(request: NextRequest) {
 
     const { searchParams } = new URL(request.url);
     const range = searchParams.get('range') || '30days';
-    const doctorId = session.user.id;
+
+    // Convert session user ID to ObjectId
+    const userObjectId = new mongoose.Types.ObjectId(session.user.id);
+    console.log('User ObjectId:', userObjectId);
+
+    // Find the Doctor document for this user
+    const doctorDoc = await Doctor.findOne({ user: userObjectId }).lean();
+    console.log('Doctor document found:', !!doctorDoc);
+
+    if (!doctorDoc) {
+      return NextResponse.json(
+        {
+          error: 'Doctor profile not found for this user',
+          debug: {
+            userId: session.user.id,
+            userObjectId: userObjectId.toString(),
+          },
+        },
+        { status: 404 }
+      );
+    }
+
+    const doctorId = doctorDoc._id;
+    console.log('Doctor ID:', doctorId);
 
     // Calculate date range based on the selected period
     const now = new Date();
@@ -566,20 +496,23 @@ export async function GET(request: NextRequest) {
         startDate.setDate(now.getDate() - 30);
     }
 
+    console.log('Date range:', { startDate, endDate: now });
+
     // Fetch analytics data in parallel
     const [
-      totalPatients,
+      uniquePatients,
       totalAppointments,
       completedAppointments,
       cancelledAppointments,
+      totalRevenueResult,
       monthlyStatsData,
       patientDemographicsData,
       appointmentTrendsData,
       commonDiagnosesData,
       revenueAnalysisData,
     ] = await Promise.all([
-      // Total patients
-      MedicalRecord.distinct('patient', { doctor: doctorId }),
+      // Total unique patients
+      Appointment.distinct('patient', { doctor: doctorId }),
 
       // Appointment counts
       Appointment.countDocuments({
@@ -588,14 +521,31 @@ export async function GET(request: NextRequest) {
       }),
       Appointment.countDocuments({
         doctor: doctorId,
-        status: 'completed',
+        status: { $in: ['COMPLETED', 'completed'] },
         createdAt: { $gte: startDate },
       }),
       Appointment.countDocuments({
         doctor: doctorId,
-        status: 'cancelled',
+        status: { $in: ['CANCELLED', 'cancelled'] },
         createdAt: { $gte: startDate },
       }),
+
+      // Total Revenue - Direct calculation
+      Appointment.aggregate([
+        {
+          $match: {
+            doctor: doctorId,
+            status: { $in: ['COMPLETED', 'completed'] },
+            createdAt: { $gte: startDate },
+          },
+        },
+        {
+          $group: {
+            _id: null,
+            total: { $sum: { $ifNull: ['$consultationFee', 0] } },
+          },
+        },
+      ]),
 
       // Monthly stats
       getMonthlyStats(doctorId, startDate),
@@ -613,19 +563,44 @@ export async function GET(request: NextRequest) {
       getRevenueAnalysis(doctorId, startDate),
     ]);
 
+    // Extract total revenue with proper fallback
+    const totalRevenue = totalRevenueResult[0]?.total || 0;
+
+    // Calculate new vs returning patients
+    const oldDate = new Date();
+    oldDate.setDate(oldDate.getDate() - 60); // 30 days before start date
+
+    const oldPatients = await Appointment.distinct('patient', {
+      doctor: doctorId,
+      createdAt: { $lt: startDate },
+    });
+
+    const newPatients = uniquePatients.filter(
+      (p: any) => !oldPatients.includes(p.toString())
+    ).length;
+
+    // Debug logging
+    console.log('Analytics Debug Info:', {
+      doctorId: doctorId.toString(),
+      timeRange: range,
+      startDate,
+      totalPatients: uniquePatients.length,
+      totalAppointments,
+      completedAppointments,
+      totalRevenue,
+      hasRevenueData: totalRevenueResult.length > 0,
+    });
+
     const analyticsData: AnalyticsData = {
       overview: {
-        totalPatients: totalPatients.length,
+        totalPatients: uniquePatients.length,
         totalAppointments,
         completedAppointments,
         cancelledAppointments,
         averageRating: 4.7, // This would come from your rating system
-        totalRevenue: revenueAnalysisData.monthlyRevenue.reduce(
-          (sum: number, month: any) => sum + month.revenue,
-          0
-        ),
-        newPatients: Math.floor(totalPatients.length * 0.3), // Example calculation
-        returningPatients: Math.floor(totalPatients.length * 0.7), // Example calculation
+        totalRevenue,
+        newPatients,
+        returningPatients: uniquePatients.length - newPatients,
       },
       monthlyStats: monthlyStatsData,
       patientDemographics: patientDemographicsData,
@@ -634,14 +609,23 @@ export async function GET(request: NextRequest) {
       revenueAnalysis: revenueAnalysisData,
     };
 
+    console.log('=== Analytics API: Success ===');
+
     return NextResponse.json({
       success: true,
       data: analyticsData,
     });
-  } catch (error) {
-    console.error('Error fetching analytics:', error);
+  } catch (error: any) {
+    console.error('=== Analytics API Error ===');
+    console.error('Error message:', error.message);
+    console.error('Error stack:', error.stack);
+
     return NextResponse.json(
-      { error: 'Internal server error' },
+      {
+        success: false,
+        error: 'Internal server error',
+        details: error.message,
+      },
       { status: 500 }
     );
   }

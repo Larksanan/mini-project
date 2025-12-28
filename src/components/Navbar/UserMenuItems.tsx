@@ -79,6 +79,11 @@ export default function UserMenuItems({
         href: '/records',
         icon: FiFileText,
       },
+      {
+        name: 'analytics',
+        href: '/doctor/analytics',
+        icon: FiBarChart2,
+      },
     ],
     NURSE: [
       { name: 'Tasks', href: '/nurse/tasks', icon: FiClipboard },
